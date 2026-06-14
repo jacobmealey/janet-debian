@@ -15,8 +15,30 @@ Section: interpreters
 Architecture: any
 Multi-Arch: foreign
 Depends:
+ libjanet1.41.2
  ${misc:Depends},
  ${shlibs:Depends},
 Description: A programming language for system scripting,
  expressive automation, and extending programs written in C or
  C++ with user scripting capabilities.
+
+
+Package: libjanet-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ libjanet-1.41.2
+Description: Development files for the Janet programming language.
+
+
+
+Package: libjanet-1.41.2
+Section: libs
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Description: Shared libraries for applications which require a Janet
+ runtime.
