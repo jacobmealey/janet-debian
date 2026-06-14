@@ -1,5 +1,5 @@
 Source: janet
-Section: unknown
+Section: interpreters 
 Priority: optional
 Maintainer: Jacob Mealey <jacobmealey.maine@gmail.com>
 Build-Depends:
@@ -15,10 +15,9 @@ Section: interpreters
 Architecture: any
 Multi-Arch: foreign
 Depends:
- libjanet1.41.2
  ${misc:Depends},
  ${shlibs:Depends},
-Description: A programming language for system scripting,
+Description: Lisp-like programming language for system scripting,
  expressive automation, and extending programs written in C or
  C++ with user scripting capabilities.
 
@@ -26,17 +25,19 @@ Description: A programming language for system scripting,
 Package: libjanet-dev
 Section: libdevel
 Architecture: any
-Multi-Arch: foreign
 Depends:
- libjanet-1.41.2
+ libjanet-0 (= ${binary:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends},
 Description: Development files for the Janet programming language.
+ These files may be used for incorporating the Janet language into a
+ C or C++ codebase.
 
 
 
-Package: libjanet-1.41.2
+Package: libjanet-0
 Section: libs
 Architecture: any
-Multi-Arch: foreign
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},

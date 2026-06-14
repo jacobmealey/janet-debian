@@ -2,6 +2,7 @@
 # See dh_installman(1)
 #
 # Lists man pages to be installed
+janet.1
 
 
 # * This is for the first binary package listed in debian/control
