@@ -13,7 +13,7 @@
 # around using the "opts=" prefix.  See PER-SITE OPTIONS in uscan(1).
 #
 # Compulsory line, this is a version 4 file
-version=5
+version=4
 
 # Uncomment to find new files on GitHub using its tags page:
 opts="filenamemangle=s%(?:.*?)?v?@ANY_VERSION@(@ARCHIVE_EXT@)%janet-$1$2%" \

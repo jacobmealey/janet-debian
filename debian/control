@@ -7,8 +7,8 @@ Build-Depends:
 Standards-Version: 4.7.4
 Homepage: https://janet-lang.org/
 Rules-Requires-Root: no
-#Vcs-Git: https://salsa.debian.org/debian/janet.git
-#Vcs-Browser: https://salsa.debian.org/debian/<project_site>
+Vcs-Git: https://salsa.debian.org/jacobmealey/janet.git
+Vcs-Browser: https://salsa.debian.org/jacobmealey/janet
 
 Package: janet
 Section: interpreters 
@@ -29,7 +29,7 @@ Depends:
  libjanet-0 (= ${binary:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
-Description: Development files for the Janet programming language.
+Description: Development files for the Janet programming language
  These files may be used for incorporating the Janet language into a
  C or C++ codebase.
 
