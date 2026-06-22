@@ -1,2 +1,3 @@
 fix-typos.patch
 Remove-strip.patch
+Add-debian-specific-CFLAGS.patch

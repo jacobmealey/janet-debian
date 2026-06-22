@@ -1,0 +1,32 @@
+From: Jacob Mealy <jacobmealey.maine@gmail.com>
+Date: Sun, 21 Jun 2026 20:28:18 -0400
+Subject: Add debian specific CFLAGS
+
+---
+ Makefile | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index 4c8d5c2..fc6543e 100644
+--- a/Makefile
++++ b/Makefile
+@@ -58,7 +58,18 @@ LDFLAGS?=-rdynamic
+ LIBJANET_LDFLAGS?=$(LDFLAGS)
+ RUN:=$(RUN)
+ 
+-COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC
++COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC \
++	-fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security \
++    -Wl,-z,relro -Wl,-z,now
++
++ifneq (,$(filter $(DEB_TARGET_ARCH), i386 amd64))
++  COMMON_CFLAGS += -fcf-protection
++endif
++
++ifeq ($(DEB_TARGET_ARCH), arm64)
++  COMMON_CFLAGS += -mbranch-protection=standard
++endif
++
+ BOOT_CFLAGS:=-DJANET_BOOTSTRAP -DJANET_BUILD=$(JANET_BUILD) -O0 $(COMMON_CFLAGS) -g
+ BUILD_CFLAGS:=$(CFLAGS) $(COMMON_CFLAGS)
+ 
