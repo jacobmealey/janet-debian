@@ -58,7 +58,18 @@ LDFLAGS?=-rdynamic
 LIBJANET_LDFLAGS?=$(LDFLAGS)
 RUN:=$(RUN)
 
-COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC
+COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC \
+	-fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security \
+    -Wl,-z,relro -Wl,-z,now
+
+ifneq (,$(filter $(DEB_TARGET_ARCH), i386 amd64))
+  COMMON_CFLAGS += -fcf-protection
+endif
+
+ifeq ($(DEB_TARGET_ARCH), arm64)
+  COMMON_CFLAGS += -mbranch-protection=standard
+endif
+
 BOOT_CFLAGS:=-DJANET_BOOTSTRAP -DJANET_BUILD=$(JANET_BUILD) -O0 $(COMMON_CFLAGS) -g
 BUILD_CFLAGS:=$(CFLAGS) $(COMMON_CFLAGS)
 
