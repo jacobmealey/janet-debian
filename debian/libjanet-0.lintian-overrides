@@ -1,3 +1,0 @@
-# Janets libraries are named `linjanet1.23.so`
-libjanet-0: package-name-doesnt-match-sonames
-libjanet-0: hardening-no-fortify-functions

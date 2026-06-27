@@ -1,6 +1,7 @@
 From: Jacob Mealy <jacobmealey.maine@gmail.com>
 Date: Sun, 14 Jun 2026 19:32:34 -0400
 Subject: fix typos
+Forwarded: https://github.com/janet-lang/janet/pull/1774
 
 ---
  src/boot/boot.janet | 4 ++--

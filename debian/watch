@@ -1,20 +1,4 @@
-# You must remove unused comment lines for the released package.
-#
-# watch control file for uscan used by Debian non-native package
-#
-# See uscan(1) for how to set this file properly
-#  * uupdate(1) for upgrade a source code package
-#  * gbp-import-orig(1) with --uscan for upgrade GIT repo
-#
-# Uncomment to activate the configuration. Erase unused portions.
-# Line continuations are performed with the tailing \\
-#
-# Many complications around package and version strings can be worked
-# around using the "opts=" prefix.  See PER-SITE OPTIONS in uscan(1).
-#
-# Compulsory line, this is a version 4 file
 version=4
 
-# Uncomment to find new files on GitHub using its tags page:
 opts="filenamemangle=s%(?:.*?)?v?@ANY_VERSION@(@ARCHIVE_EXT@)%janet-$1$2%" \
   https://github.com/janet-lang/janet/tags .*/v?(\d[\d.]*)@ARCHIVE_EXT@
