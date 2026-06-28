@@ -18,7 +18,7 @@ Depends:
  libjanet1.41,
  ${misc:Depends},
  ${shlibs:Depends},
-Description: Lisp-like programming language for system scripting,
+Description: Lisp-like programming language for system scripting
  expressive automation, and extending programs written in C
  or C++ with user scripting capabilities.
 
@@ -42,5 +42,7 @@ Architecture: any
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
-Description: Shared libraries for applications which require a Janet
- runtime.
+Description: Shared libraries for the Janet programming language
+ Janet is lisp-like programming language for system scripting
+ expressive automation, and extending programs written in C
+ or C++ with user scripting capabilities.
