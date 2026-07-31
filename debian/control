@@ -1,17 +1,15 @@
 Source: janet
-Section: interpreters 
-Priority: optional
+Section: interpreters
 Maintainer: Jacob Mealey <jacobmealey.maine@gmail.com>
 Build-Depends:
- debhelper-compat (= 13),
+ debhelper-compat (= 14),
 Standards-Version: 4.7.4
 Homepage: https://janet-lang.org/
-Rules-Requires-Root: no
 Vcs-Git: https://salsa.debian.org/jacobmealey/janet.git
 Vcs-Browser: https://salsa.debian.org/jacobmealey/janet
 
 Package: janet
-Section: interpreters 
+Section: interpreters
 Architecture: any
 Multi-Arch: foreign
 Depends:

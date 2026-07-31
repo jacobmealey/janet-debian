@@ -1,7 +1,7 @@
-From: Jacob Mealy <jacobmealey.maine@gmail.com>
+Author: Jacob Mealy <jacobmealey.maine@gmail.com>
 Date: Sun, 21 Jun 2026 20:28:18 -0400
-Subject: Add debian specific CFLAGS
 Forwarded: not-needed
+Subject: Add debian specific CFLAGS
 
 ---
  Makefile | 13 ++++++++++++-
