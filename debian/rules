@@ -11,4 +11,4 @@ override_dh_auto_install:
 		LIBDIR=/usr/lib/$(DEB_HOST_MULTIARCH) \
         STRIPFLAGS="--keep-section-symbols --keep-file-symbols"
 	
-	dh_installexamples examples/
+	dh_installexamples -A examples/*

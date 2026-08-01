@@ -1,0 +1,16 @@
+From: Jacob Mealy <jacobmealey.maine@gmail.com>
+Date: Fri, 31 Jul 2026 19:54:43 -0400
+Subject: Remove spurious .gitignore
+
+---
+ examples/numarray/.gitignore | 1 -
+ 1 file changed, 1 deletion(-)
+ delete mode 100644 examples/numarray/.gitignore
+
+diff --git a/examples/numarray/.gitignore b/examples/numarray/.gitignore
+deleted file mode 100644
+index 796b96d..0000000
+--- a/examples/numarray/.gitignore
++++ /dev/null
+@@ -1 +0,0 @@
+-/build

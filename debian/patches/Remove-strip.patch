@@ -1,9 +1,6 @@
-Author: Jacob Mealy <jacobmealey.maine@gmail.com>
+From: Jacob Mealy <jacobmealey.maine@gmail.com>
 Date: Sun, 14 Jun 2026 19:55:18 -0400
-Forwarded: not-needed
 Subject: Remove strip
- Removes manual stripping process to let the Debian build system
- handle it. This is required to get a -dbg package.
 
 ---
  Makefile | 1 -
