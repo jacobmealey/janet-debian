@@ -1,6 +1,10 @@
-From: Jacob Mealy <jacobmealey.maine@gmail.com>
+Author: Jacob Mealey <jacobmealey.maine@gmail.com>
 Date: Sun, 14 Jun 2026 19:55:18 -0400
-Subject: Remove strip
+Subject: Remove manual stripping step
+ Debians build system expects to have full symbols and handle
+ stripping for us, so we remove the step in the build scripts
+ to strip the binaries.
+Forwarded: not-needed
 
 ---
  Makefile | 1 -

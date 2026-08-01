@@ -1,6 +1,7 @@
-From: Jacob Mealy <jacobmealey.maine@gmail.com>
+Author: Jacob Mealey <jacobmealey.maine@gmail.com>
 Date: Fri, 31 Jul 2026 19:54:43 -0400
 Subject: Remove spurious .gitignore
+Forwarded: not-needed
 
 ---
  examples/numarray/.gitignore | 1 -
