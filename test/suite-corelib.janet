@@ -75,6 +75,8 @@
 (assert (deep= @[0 1 2 3] (range 3.999)) "range 3")
 (assert (deep= @[0.8 1.8 2.8 3.8] (range 0.8 3.999)) "range 4")
 (assert (deep= @[0.8 1.8 2.8 3.8] (range 0.8 3.999)) "range 5")
+(assert (deep= @[] (range 10 0 0)) "range 6")
+(assert (deep= @[] (range 0 10 0)) "range 7")
 
 (assert (< 1.0 nil false true
            (fiber/new (fn [] 1))
@@ -206,5 +208,16 @@
 (assert (= (macex1 '|(set (my-table [2 1]) 'foo))
            '(fn :short-fn [] (set (my-table [2 1]) (quote foo))))
         "Macro expand inside set preserves tuple type correctly")
+
+(assert-error "no infinite step range" (range 3 3 math/inf))
+
+# Issue #1790
+(assert-no-error "limit short-fn parameters 1" (macex1 '|$9999))
+(assert-error "limit short-fn parameters 2" (macex1 '|$10000))
+(assert-error "limit short-fn parameters 3" (macex1 '|$10001))
+(assert-error "limit short-fn parameters 4" (macex1 '|$100010))
+(assert-error "limit short-fn parameters 5" (macex1 '|$800010))
+(assert-error "limit short-fn parameters 6" (macex1 '|$8888888888888888888888888888888888888888888888888888888888888888888888888888888))
+(assert-error "limit short-fn parameters 7" (macex1 '|$8.8))
 
 (end-suite)

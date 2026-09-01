@@ -43,6 +43,7 @@ static void *io_file_unmarshal(JanetMarshalContext *ctx);
 static Janet io_file_next(void *p, Janet key);
 
 #ifdef JANET_WINDOWS
+#include <io.h>
 #define ftell _ftelli64
 #define fseek _fseeki64
 #endif
@@ -109,10 +110,11 @@ static int32_t checkflags(const uint8_t *str) {
     return flags;
 }
 
-static void *makef(FILE *f, int32_t flags) {
+static void *makef(FILE *f, int32_t flags, size_t bufsize) {
     JanetFile *iof = (JanetFile *) janet_abstract(&janet_file_type, sizeof(JanetFile));
     iof->file = f;
     iof->flags = flags;
+    iof->vbufsize = bufsize;
 #if !(defined(JANET_WINDOWS) || defined(JANET_PLAN9))
     /* While we would like fopen to set cloexec by default (like O_CLOEXEC) with the e flag, that is
      * not standard. */
@@ -164,6 +166,7 @@ JANET_CORE_FN(cfun_io_fopen,
         flags = JANET_FILE_READ;
     }
     FILE *f = fopen((const char *)fname, (const char *)fmode);
+    size_t bufsize = BUFSIZ;
     if (f != NULL) {
 #if !(defined(JANET_WINDOWS) || defined(JANET_PLAN9))
         struct stat st;
@@ -173,7 +176,7 @@ JANET_CORE_FN(cfun_io_fopen,
             janet_panicf("cannot open directory: %s", fname);
         }
 #endif
-        size_t bufsize = janet_optsize(argv, argc, 2, BUFSIZ);
+        bufsize = janet_optsize(argv, argc, 2, BUFSIZ);
         if (bufsize != BUFSIZ) {
             int result = setvbuf(f, NULL, bufsize ? _IOFBF : _IONBF, bufsize);
             if (result) {
@@ -181,7 +184,7 @@ JANET_CORE_FN(cfun_io_fopen,
             }
         }
     }
-    return f ? janet_makefile(f, flags)
+    return f ? janet_wrap_abstract(makef(f, flags, bufsize))
            : (flags & JANET_FILE_NONIL) ? (janet_panicf("failed to open file %s: %s", fname, janet_strerror(errno)), janet_wrap_nil())
            : janet_wrap_nil();
 }
@@ -408,21 +411,36 @@ static Janet io_file_next(void *p, Janet key) {
 
 static void io_file_marshal(void *p, JanetMarshalContext *ctx) {
     JanetFile *iof = (JanetFile *)p;
-    if (ctx->flags & JANET_MARSHAL_UNSAFE) {
+    if (janet_marshal_flags(ctx) & JANET_MARSHAL_UNSAFE) {
         janet_marshal_abstract(ctx, p);
+        int fno = -1;
 #ifdef JANET_WINDOWS
-        janet_marshal_int(ctx, _fileno(iof->file));
+        if (iof->flags & JANET_FILE_NOT_CLOSEABLE) {
+            fno = _fileno(iof->file);
+        } else {
+            fno = _dup(_fileno(iof->file));
+        }
 #else
-        janet_marshal_int(ctx, fileno(iof->file));
+        if (iof->flags & JANET_FILE_NOT_CLOSEABLE) {
+            fno = fileno(iof->file);
+        } else {
+#ifdef JANET_PLAN9
+            fno = dup(fileno(iof->file), -1);
+#else
+            fno = dup(fileno(iof->file));
 #endif
+        }
+#endif
+        janet_marshal_int(ctx, fno);
         janet_marshal_int(ctx, iof->flags);
+        janet_marshal_size(ctx, iof->vbufsize);
     } else {
         janet_panic("cannot marshal file in safe mode");
     }
 }
 
 static void *io_file_unmarshal(JanetMarshalContext *ctx) {
-    if (ctx->flags & JANET_MARSHAL_UNSAFE) {
+    if (janet_unmarshal_flags(ctx) & JANET_MARSHAL_UNSAFE) {
         JanetFile *iof = janet_unmarshal_abstract(ctx, sizeof(JanetFile));
         int32_t fd = janet_unmarshal_int(ctx);
         int32_t flags = janet_unmarshal_int(ctx);
@@ -443,6 +461,11 @@ static void *io_file_unmarshal(JanetMarshalContext *ctx) {
             iof->flags = JANET_FILE_CLOSED;
         } else {
             iof->flags = flags;
+        }
+        iof->vbufsize = janet_unmarshal_size(ctx);
+        if (iof->vbufsize != BUFSIZ) {
+            int result = setvbuf(iof->file, NULL, iof->vbufsize ? _IOFBF : _IONBF, iof->vbufsize);
+            janet_assert(!result, "unmarshal setvbuf");
         }
         return iof;
     } else {
@@ -785,11 +808,11 @@ FILE *janet_getfile(const Janet *argv, int32_t n, int32_t *flags) {
 }
 
 JanetFile *janet_makejfile(FILE *f, int32_t flags) {
-    return makef(f, flags);
+    return makef(f, flags, BUFSIZ);
 }
 
 Janet janet_makefile(FILE *f, int32_t flags) {
-    return janet_wrap_abstract(makef(f, flags));
+    return janet_wrap_abstract(makef(f, flags, BUFSIZ));
 }
 
 JanetAbstract janet_checkfile(Janet j) {

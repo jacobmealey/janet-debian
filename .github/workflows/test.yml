@@ -12,12 +12,26 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, macos-latest, macos-14 ]
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-14, macos-15-intel ]
     steps:
       - name: Checkout the repository
         uses: actions/checkout@master
       - name: Compile the project
         run: make clean && make
+      - name: Test the project
+        run: make test
+
+  test-posix-sanitizers:
+    name: Build and test on POSIX systems with sanitizers turned on
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Compile the project
+        run: make clean && CFLAGS="-g -O2 -fsanitize=address,undefined" make
       - name: Test the project
         run: make test
 
@@ -38,6 +52,27 @@ jobs:
       - name: Test the project
         shell: cmd
         run: build_win test
+      - name: Test installer build
+        shell: cmd
+        run: build_win dist
+
+  test-windows-sanitizers:
+    name: Build and test on Windows with sanitizers
+    strategy:
+      matrix:
+        os: [ windows-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@master
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build the project
+        shell: cmd
+        run: set SANITIZE=1 & build_win
+      - name: Test the project
+        shell: cmd
+        run: set VERBOSE=1 & build_win test
       - name: Test installer build
         shell: cmd
         run: build_win dist

@@ -603,7 +603,7 @@ static JanetAssembleResult janet_asm1(JanetAssembler *parent, Janet source, int 
     x = janet_get1(s, janet_ckeywordv("constants"));
     if (janet_indexed_view(x, &arr, &count)) {
         def->constants_length = count;
-        def->constants = janet_malloc(sizeof(Janet) * (size_t) count);
+        def->constants = array_allocate(sizeof(Janet), count);
         if (NULL == def->constants) {
             JANET_OUT_OF_MEMORY;
         }
@@ -667,7 +667,7 @@ static JanetAssembleResult janet_asm1(JanetAssembler *parent, Janet source, int 
         }
         /* Allocate bytecode array */
         def->bytecode_length = blength;
-        def->bytecode = janet_malloc(sizeof(uint32_t) * (size_t) blength);
+        def->bytecode = array_allocate(sizeof(uint32_t), blength);
         if (NULL == def->bytecode) {
             JANET_OUT_OF_MEMORY;
         }
@@ -1110,6 +1110,7 @@ JANET_CORE_FN(cfun_disasm,
         if (!janet_cstrcmp(kw, "structarg")) return janet_disasm_structarg(f->def);
         if (!janet_cstrcmp(kw, "namedargs")) return janet_disasm_namedargs(f->def);
         if (!janet_cstrcmp(kw, "slotcount")) return janet_disasm_slotcount(f->def);
+        if (!janet_cstrcmp(kw, "symbolmap")) return janet_disasm_symbolslots(f->def);
         if (!janet_cstrcmp(kw, "constants")) return janet_disasm_constants(f->def);
         if (!janet_cstrcmp(kw, "sourcemap")) return janet_disasm_sourcemap(f->def);
         if (!janet_cstrcmp(kw, "environments")) return janet_disasm_environments(f->def);

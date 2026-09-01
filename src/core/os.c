@@ -50,6 +50,11 @@
 #include <sched.h>
 #endif
 
+#ifdef JANET_GNU_HURD
+/* Ideally we would try to dynamically allocate */
+#define PATH_MAX 8192
+#endif
+
 #ifdef JANET_WINDOWS
 #include <windows.h>
 #include <direct.h>
@@ -151,6 +156,7 @@ JANET_CORE_FN(os_which,
               "* :macos\n\n"
               "* :web - Web assembly (emscripten)\n\n"
               "* :linux\n\n"
+              "* :hurd\n\n"
               "* :freebsd\n\n"
               "* :openbsd\n\n"
               "* :netbsd\n\n"
@@ -177,6 +183,8 @@ JANET_CORE_FN(os_which,
     return janet_ckeywordv("web");
 #elif defined(JANET_LINUX)
     return janet_ckeywordv("linux");
+#elif defined(JANET_GNU_HURD)
+    return janet_ckeywordv("hurd");
 #elif defined(__FreeBSD__)
     return janet_ckeywordv("freebsd");
 #elif defined(__NetBSD__)
@@ -276,6 +284,7 @@ JANET_CORE_FN(os_exit,
               "the exit with status equal the hash of x. If `force` is truthy will exit immediately and "
               "skip cleanup code.") {
     janet_arity(argc, 0, 2);
+    janet_sandbox_assert(JANET_SANDBOX_EXIT);
     int status;
     if (argc == 0) {
         status = EXIT_SUCCESS;
@@ -284,9 +293,14 @@ JANET_CORE_FN(os_exit,
     } else {
         status = EXIT_FAILURE;
     }
+    int force = (argc >= 2 && janet_truthy(argv[1]));
     janet_deinit();
-    if (argc >= 2 && janet_truthy(argv[1])) {
+    if (force) {
+#ifdef JANET_PLAN9
+        exits(nil);
+#else
         _Exit(status);
+#endif
     } else {
         exit(status);
     }
@@ -1332,7 +1346,7 @@ static Janet os_execute_impl(int32_t argc, Janet *argv, JanetExecuteMode mode) {
                       msgbuf,
                       sizeof(msgbuf),
                       NULL);
-        if (!*msgbuf) snprintf(msgbuf, sizeof(msgbuf), "%" PRIu32, cp_error_code);
+        if (!*msgbuf) snprintf(msgbuf, sizeof(msgbuf), "%" PRIu32, (uint32_t) cp_error_code);
         char *c = msgbuf;
         while (*c) {
             if (*c == '\n' || *c == '\r') {
@@ -1609,6 +1623,7 @@ JANET_CORE_FN(os_posix_chroot,
 static JanetEVGenericMessage os_shell_subr(JanetEVGenericMessage args) {
     int stat = system((const char *) args.argp);
     janet_free(args.argp);
+    args.argp = NULL;
     if (args.argi) {
         args.tag = JANET_EV_TCTAG_INTEGER;
     } else {
@@ -1621,14 +1636,22 @@ static JanetEVGenericMessage os_shell_subr(JanetEVGenericMessage args) {
 
 JANET_CORE_FN(os_shell,
               "(os/shell str)",
-              "Pass a command string str directly to the system shell.") {
+              "Pass a command string `str` directly to the system shell. Prefer `os/execute` "
+              "in most cases.") {
     janet_sandbox_assert(JANET_SANDBOX_SUBPROCESS);
     janet_arity(argc, 0, 1);
     const char *cmd = argc
                       ? janet_getcstring(argv, 0)
                       : NULL;
 #ifdef JANET_EV
-    janet_ev_threaded_await(os_shell_subr, 0, argc, cmd ? strdup(cmd) : NULL);
+    char *cmd_copy = NULL;
+    if (cmd != NULL) {
+        size_t cmdlen = strlen(cmd);
+        cmd_copy = janet_malloc(cmdlen + 1);
+        memcpy(cmd_copy, cmd, cmdlen);
+        cmd_copy[cmdlen] = '\0';
+    }
+    janet_ev_threaded_await(os_shell_subr, 0, argc, cmd_copy);
 #else
     int stat = system(cmd);
     return argc
@@ -2076,6 +2099,7 @@ JANET_CORE_FN(os_setlocale,
               " * :time\n\n"
               "Returns the new locale if set successfully, otherwise nil. Note that this will affect "
               "other functions such as `os/strftime` and even `printf`.") {
+    janet_sandbox_assert(JANET_SANDBOX_LOCALE);
     janet_arity(argc, 0, 2);
     const char *locale_name = janet_optcstring(argv, argc, 0, NULL);
     int category_int = LC_ALL;
@@ -2181,7 +2205,7 @@ JANET_CORE_FN(os_rmdir,
 JANET_CORE_FN(os_cd,
               "(os/cd path)",
               "Change current directory to path. Returns nil on success, errors on failure.") {
-    janet_sandbox_assert(JANET_SANDBOX_FS_READ);
+    janet_sandbox_assert(JANET_SANDBOX_FS_READ | JANET_SANDBOX_FS_WRITE);
     janet_fixarity(argc, 1);
     const char *path = janet_getcstring(argv, 0);
 #ifdef JANET_WINDOWS
@@ -2220,6 +2244,7 @@ JANET_CORE_FN(os_touch,
 JANET_CORE_FN(os_remove,
               "(os/rm path)",
               "Delete a file. Returns nil.") {
+    janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
     janet_fixarity(argc, 1);
     const char *path = janet_getcstring(argv, 0);
     int status = remove(path);
@@ -2231,13 +2256,14 @@ JANET_CORE_FN(os_remove,
 JANET_CORE_FN(os_readlink,
               "(os/readlink path)",
               "Read the contents of a symbolic link. Does not work on Windows.\n") {
+    janet_sandbox_assert(JANET_SANDBOX_FS_READ);
     janet_fixarity(argc, 1);
 #ifdef JANET_WINDOWS
     (void) argc;
     (void) argv;
     janet_panic("not supported on Windows");
 #else
-    static char buffer[PATH_MAX];
+    char buffer[PATH_MAX];
     const char *path = janet_getcstring(argv, 0);
     ssize_t len = readlink(path, buffer, sizeof buffer);
     if (len < 0 || (size_t)len >= sizeof buffer)
@@ -2501,8 +2527,9 @@ static Janet os_stat_or_lstat(int do_lstat, int32_t argc, Janet *argv) {
 
 JANET_CORE_FN(os_stat,
               "(os/stat path &opt tab|key)",
-              "Gets information about a file or directory. Returns a table if the second argument is a keyword, returns "
-              "only that information from stat. If the file or directory does not exist, returns nil. The keys are:\n\n"
+              "Gets information about a file or directory. Returns a table unless the second argument is a keyword, "
+              "in which case it returns only that field/value from stat. If the file or directory does not exist, returns nil."
+              "The keys are:\n\n"
               "* :dev - the device that the file is on\n\n"
               "* :mode - the type of file, one of :file, :directory, :block, :character, :fifo, :socket, :link, or :other\n\n"
               "* :int-permissions - A Unix permission integer like 8r744\n\n"
@@ -2652,7 +2679,7 @@ JANET_CORE_FN(os_realpath,
         janet_panicf("path does not exist: %v", ret);
     }
 #else
-    janet_free(dest);
+    free(dest);
 #endif
     return ret;
 #endif
@@ -2812,15 +2839,19 @@ JANET_CORE_FN(os_open,
             break;
         case OCREAT:
             creationDisp = OPEN_ALWAYS;
+            janet_sandbox_assert(JANET_SANDBOX_FS_WRITE | JANET_SANDBOX_FS_READ);
             break;
         case OCREAT + OEXCL:
             creationDisp = CREATE_NEW;
+            janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
             break;
         case OCREAT + OTRUNC:
             creationDisp = CREATE_ALWAYS;
+            janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
             break;
         case OTRUNC:
             creationDisp = TRUNCATE_EXISTING;
+            janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
             break;
     }
     if (fileAttributes == 0) {
@@ -2875,6 +2906,7 @@ JANET_CORE_FN(os_open,
                 break;
             case 'a':
                 open_flags |= O_APPEND;
+                janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
                 break;
             case 'N':
                 open_flags &= ~O_NONBLOCK;
@@ -2885,10 +2917,13 @@ JANET_CORE_FN(os_open,
     /* If both read and write, fix up to O_RDWR */
     if (read_flag && !write_flag) {
         open_flags |= O_RDONLY;
+        janet_sandbox_assert(JANET_SANDBOX_FS_READ);
     } else if (write_flag && !read_flag) {
         open_flags |= O_WRONLY;
+        janet_sandbox_assert(JANET_SANDBOX_FS_WRITE);
     } else {
         open_flags |= O_RDWR;
+        janet_sandbox_assert(JANET_SANDBOX_FS_WRITE | JANET_SANDBOX_FS_READ);
     }
 
     do {
@@ -2909,6 +2944,7 @@ JANET_CORE_FN(os_pipe,
               "* :R - sets the readable end of the pipe to a blocking stream.\n\n"
               "By default, both ends of the pipe are non-blocking for use with the `ev` module.") {
     (void) argv;
+    janet_sandbox_assert(JANET_SANDBOX_FS_WRITE | JANET_SANDBOX_FS_TEMP);
     janet_arity(argc, 0, 1);
     JanetHandle fds[2];
     int flags = 0;
@@ -2979,8 +3015,6 @@ void janet_lib_os(JanetTable *env) {
         JANET_CORE_REG("os/dir", os_dir),
         JANET_CORE_REG("os/stat", os_stat),
         JANET_CORE_REG("os/lstat", os_lstat),
-        JANET_CORE_REG("os/chmod", os_chmod),
-        JANET_CORE_REG("os/touch", os_touch),
         JANET_CORE_REG("os/realpath", os_realpath),
         JANET_CORE_REG("os/cd", os_cd),
 #ifndef JANET_NO_UMASK
@@ -2996,6 +3030,8 @@ void janet_lib_os(JanetTable *env) {
         JANET_CORE_REG("os/rm", os_remove),
         JANET_CORE_REG("os/link", os_link),
         JANET_CORE_REG("os/rename", os_rename),
+        JANET_CORE_REG("os/chmod", os_chmod),
+        JANET_CORE_REG("os/touch", os_touch),
 #ifndef JANET_NO_SYMLINKS
         JANET_CORE_REG("os/symlink", os_symlink),
 #endif

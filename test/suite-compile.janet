@@ -84,23 +84,23 @@
 (assert (get result :error) "bad sum3 fuzz issue valgrind")
 
 # Issue #1700
-(def result
+(def result1
   (compile
     '(defn fuzz-case-1
       [start end &]
       (if end
         (if e start (lazy-range (+ 1 start) end)))
       1)))
-(assert (get result :error) "fuzz case issue #1700")
+(assert (get result1 :error) "fuzz case issue #1700")
 
 # Issue #1702 - fuzz case with upvalues
-(def result
+(def result2
   (compile
   '(each item [1 2 3]
     # Generate a lot of upvalues (more than 224)
     (def ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;out-buf @"")
     (with-dyns [:out out-buf] 1))))
-(assert result "bad upvalues fuzz case")
+(assert result2 "bad upvalues fuzz case")
 
 # Named argument linting
 # Enhancement for #1654
@@ -117,14 +117,20 @@
 (defn check-good-compile
   [code msg]
   (def lints @[])
-  (def result (compile code (curenv) "suite-compile.janet" lints))
-  (assert (and (function? result) (empty? lints)) msg))
+  (def result4 (compile code (curenv) "suite-compile.janet" lints))
+  (assert (and (function? result4) (empty? lints)) msg))
+
+(defn check-bad-compile
+  [code msg]
+  (def lints @[])
+  (def result4 (compile code (curenv) "suite-compile.janet" lints))
+  (assert (not (and (function? result4) (empty? lints))) msg))
 
 (defn check-lint-compile
   [code msg]
   (def lints @[])
-  (def result (compile code (curenv) "suite-compile.janet" lints))
-  (assert (and (function? result) (next lints)) msg))
+  (def result4 (compile code (curenv) "suite-compile.janet" lints))
+  (assert (and (function? result4) (next lints)) msg))
 
 (check-good-compile '(fnamed) "named no args")
 (check-good-compile '(fnamed :x 1 :y 2 :z 3) "named full args")
@@ -150,5 +156,40 @@
 (check-lint-compile '(g 1 2 :z) "g lint 1")
 (check-lint-compile '(g 1 2 :z 4 5) "g lint 2")
 
-(end-suite)
+# Variable shadowing linting
+(def outer1 "a")
+(check-lint-compile '(def outer1 "b") "shadow global-to-global")
+(check-lint-compile '(let [outer1 "b"] outer1) "shadow local-to-global")
+(check-lint-compile '(do (def x "b") (def x "c")) "shadow local-to-local")
 
+(check-lint-compile '(def [xxx [xxx yyy]] [1 [2 3]]) "shadow global-to-global one form")
+
+# Fuzz issue - odd keys
+(defn f [x &keys ks] [x ks])
+(check-lint-compile
+  '(f 1
+      = = = = = = = = = =
+      = = = = = = = = = =
+      = = = = = = = = = =
+      = = = = = = = = = =
+      = = =)
+  "odd keys")
+
+# Test for any issues with valgrind/asan
+(setdyn *lint-warn* :relaxed)
+(assert-no-error
+  "odd keys runtime"
+    (f 1
+       = = = = = = = = = =
+       = = = = = = = = = =
+       = = = = = = = = = =
+       = = = = = = = = = =
+       = = =))
+(setdyn *lint-warn* nil)
+
+# Handle bad eachp
+(check-good-compile '(eachp () 5) "good compile eachp 1")
+(check-good-compile '(do (def [] [1]) nil) "def with empty tuple binding 1")
+(check-good-compile '(do (def x (def [] [1])) x) "def with empty tuple binding 2")
+
+(end-suite)

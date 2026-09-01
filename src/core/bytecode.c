@@ -29,7 +29,7 @@
 #endif
 
 /* Look up table for instructions */
-enum JanetInstructionType janet_instructions[JOP_INSTRUCTION_COUNT] = {
+const enum JanetInstructionType janet_instructions[JOP_INSTRUCTION_COUNT] = {
     JINT_0, /* JOP_NOOP, */
     JINT_S, /* JOP_ERROR, */
     JINT_ST, /* JOP_TYPECHECK, */
@@ -139,6 +139,8 @@ void janet_bytecode_remove_noops(JanetFuncDef *def) {
             case JOP_JUMP:
                 /* relative pc is in DS field of instruction */
                 old_jump_target = i + (((int32_t)instr) >> 8);
+                janet_assert(old_jump_target >= 0, "bounds");
+                janet_assert(old_jump_target < def->bytecode_length, "bounds");
                 new_jump_target = pc_map[old_jump_target];
                 instr += (uint32_t)(new_jump_target - old_jump_target + (i - j)) << 8;
                 break;
@@ -148,6 +150,8 @@ void janet_bytecode_remove_noops(JanetFuncDef *def) {
             case JOP_JUMP_IF_NOT_NIL:
                 /* relative pc is in ES field of instruction */
                 old_jump_target = i + (((int32_t)instr) >> 16);
+                janet_assert(old_jump_target >= 0, "bounds");
+                janet_assert(old_jump_target < def->bytecode_length, "bounds");
                 new_jump_target = pc_map[old_jump_target];
                 instr += (uint32_t)(new_jump_target - old_jump_target + (i - j)) << 16;
                 break;
@@ -404,6 +408,7 @@ int janet_verify(JanetFuncDef *def) {
     int32_t maxslot = def->arity + vargs;
     int32_t sc = def->slotcount;
 
+    if (def->environments_length > 256) return 15;
     if (def->bytecode_length == 0) return 1;
 
     if (maxslot > sc) return 2;
@@ -493,6 +498,30 @@ int janet_verify(JanetFuncDef *def) {
             case JOP_ERROR:
             case JOP_TAILCALL:
                 break;
+        }
+    }
+
+    /* Verify debug info - slotmapping, etc. */
+    for (int32_t i = def->symbolmap_length - 1; i >= 0; i--) {
+        JanetSymbolMap jsm = def->symbolmap[i];
+        if (jsm.birth_pc == UINT32_MAX) {
+            if (jsm.death_pc >= (uint32_t) def->environments_length) {
+                return 10;
+                /* We should also check jsm.slot_index */
+            }
+        } else {
+            if (jsm.slot_index >= (uint32_t) def->slotcount) {
+                return 11;
+            }
+            if (jsm.birth_pc != UINT32_MAX && jsm.birth_pc >= (uint32_t) def->bytecode_length) {
+                return 12;
+            }
+            if (jsm.death_pc != UINT32_MAX && jsm.death_pc > (uint32_t) def->bytecode_length) {
+                return 13;
+            }
+        }
+        if (jsm.symbol == NULL) {
+            return 14;
         }
     }
 

@@ -50,9 +50,9 @@
 #ifndef JANET_EXIT
 #include <stdio.h>
 #define JANET_EXIT(m) do { \
-    fprintf(stderr, "janet internal error at line %d in file %s: %s\n",\
-        __LINE__,\
+    fprintf(stderr, "janet abort at %s:%d: %s\n",\
         __FILE__,\
+        __LINE__,\
         (m));\
     abort();\
 } while (0)
@@ -172,6 +172,9 @@ int janet_gettime(struct timespec *spec, enum JanetTimeSource source);
 #define strdup(x) _strdup(x)
 #endif
 
+/* Safely allocate arrays */
+void *array_allocate(size_t element_size, int32_t count);
+
 /* Use LoadLibrary on windows or dlopen on posix to load dynamic libraries
  * with native code. */
 #if defined(JANET_NO_DYNAMIC_MODULES)
@@ -201,6 +204,21 @@ char *get_processed_name(const char *name);
 #define RETRY_EINTR(RC, CALL) (RC) = CALL;
 #else
 #define RETRY_EINTR(RC, CALL) do { (RC) = CALL; } while((RC) < 0 && errno == EINTR)
+#endif
+
+#ifdef JANET_EV
+#ifdef JANET_WINDOWS
+#include <winsock2.h>
+#include <windows.h>
+#include <io.h>
+typedef struct {
+    union {
+        OVERLAPPED overlapped;
+        WSAOVERLAPPED wsaoverlapped;
+    } as;
+    uint32_t bytes_transfered;
+} JanetOverlapped;
+#endif
 #endif
 
 /* Initialize builtin libraries */
