@@ -1,3 +1,9 @@
+janet (1.42.0-1) UNRELEASED; urgency=medium
+
+  * Update new Janet 1.42.0
+
+ -- Jacob Mealey <jacobmealey.maine@gmail.com>  Tue, 01 Sep 2026 19:22:25 -0400
+
 janet (1.41.2-1) unstable; urgency=low
 
   * Initial release. Closes: #983003
