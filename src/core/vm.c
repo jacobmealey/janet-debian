@@ -234,18 +234,22 @@
         }\
     }
 
-/* Trace a function call */
-static void vm_do_trace(JanetFunction *func, int32_t argc, const Janet *argv) {
-    if (func->def->name) {
-        janet_eprintf("trace (%S", func->def->name);
-    } else {
-        janet_eprintf("trace (%p", janet_wrap_function(func));
-    }
-    for (int32_t i = 0; i < argc; i++) {
-        janet_eprintf(" %p", argv[i]);
-    }
-    janet_eprintf(")\n");
-}
+/* Trace a function call.
+ * This is a macro to avoid stale argv if janet_eprintf resizes the stack
+ */
+#define vm_do_trace(func, argc, argv) do { \
+    JanetFunction* _func = (func);\
+    if (_func->def->name) {\
+        janet_eprintf("trace (%S", _func->def->name);\
+    } else {\
+        janet_eprintf("trace (%p", janet_wrap_function(_func));\
+    }\
+    int32_t _argc = (argc);\
+    for (int32_t i = 0; i < _argc; i++) {\
+        janet_eprintf(" %p", (argv)[i]);\
+    }\
+    janet_eprintf(")\n");\
+} while (0)
 
 /* Invoke a method once we have looked it up */
 static Janet janet_method_invoke(Janet method, int32_t argc, Janet *argv) {
@@ -614,10 +618,13 @@ static JanetSignal run_vm(JanetFiber *fiber, Janet in) {
     register uint32_t *pc;
     register JanetFunction *func;
 
+    /* NOTE: Flag smuggling! We "smuggle" the fiber sigal in the gc.flags field instead of the usual flags field */
     if (fiber->flags & JANET_FIBER_RESUME_SIGNAL) {
+        /* Get the signal */
         JanetSignal sig = (fiber->gc.flags & JANET_FIBER_STATUS_MASK) >> JANET_FIBER_STATUS_OFFSET;
+        /* Clear the signal */
         fiber->gc.flags &= ~JANET_FIBER_STATUS_MASK;
-        fiber->flags &= ~(JANET_FIBER_RESUME_SIGNAL | JANET_FIBER_FLAG_MASK);
+        fiber->flags &= ~JANET_FIBER_RESUME_SIGNAL;
         janet_vm.return_reg[0] = in;
         return sig;
     }
@@ -1127,11 +1134,11 @@ static JanetSignal run_vm(JanetFiber *fiber, Janet in) {
         }
         fiber->child = child;
         JanetSignal sig = janet_continue_no_check(child, stack[C], &retreg);
+        stack = fiber->data + fiber->frame;
         if (sig != JANET_SIGNAL_OK && !(child->flags & (1 << sig))) {
             vm_return(sig, retreg);
         }
         fiber->child = NULL;
-        stack = fiber->data + fiber->frame;
         stack[A] = retreg;
         vm_checkgc_pcnext();
     }
@@ -1453,7 +1460,7 @@ static JanetSignal janet_check_can_resume(JanetFiber *fiber, Janet *out, int is_
     }
     /* If a "task" fiber is trying to be used as a normal fiber, detect that. See bug #920.
      * Fibers must be marked as root fibers manually, or by the ev scheduler. */
-    if (janet_vm.fiber != NULL && (fiber->gc.flags & JANET_FIBER_FLAG_ROOT)) {
+    if (janet_vm.fiber != NULL && (fiber->gc.flags & JANET_FIBER_EV_GCFLAG_ROOT)) {
 #ifdef JANET_EV
         *out = janet_cstringv(is_cancel
                               ? "cannot cancel root fiber, use ev/cancel"
@@ -1559,6 +1566,15 @@ static JanetSignal janet_continue_no_check(JanetFiber *fiber, Janet in, Janet *o
         }
     }
 
+    /* If this is a nested continue (root_fiber already set), root the fiber
+     * so it survives GC. janet_collect only marks root_fiber, so without
+     * this a nested fiber (e.g., from janet_pcall in a C function) would be
+     * invisible to GC and could be collected while actively running. */
+    int fiber_rooted = (janet_vm.root_fiber != NULL);
+    if (fiber_rooted) {
+        janet_gcroot(janet_wrap_fiber(fiber));
+    }
+
     /* Save global state */
     JanetTryState tstate;
     JanetSignal sig = janet_try(&tstate);
@@ -1574,6 +1590,9 @@ static JanetSignal janet_continue_no_check(JanetFiber *fiber, Janet in, Janet *o
     if (janet_vm.root_fiber == fiber) janet_vm.root_fiber = NULL;
     janet_fiber_set_status(fiber, sig);
     janet_restore(&tstate);
+    if (fiber_rooted) {
+        janet_gcunroot(janet_wrap_fiber(fiber));
+    }
     fiber->last_value = tstate.payload;
     *out = tstate.payload;
 
@@ -1595,6 +1614,8 @@ JanetSignal janet_continue_signal(JanetFiber *fiber, Janet in, Janet *out, Janet
     if (sig != JANET_SIGNAL_OK) {
         JanetFiber *child = fiber;
         while (child->child) child = child->child;
+        /* NOTE: We are "smuggling" flags in for later use in an unusal place. This is odd but intentional and
+         * saves a bit of memory per fiber rather than creating a new field. There is likely a better way to do this. */
         child->gc.flags &= ~JANET_FIBER_STATUS_MASK;
         child->gc.flags |= sig << JANET_FIBER_STATUS_OFFSET;
         child->flags |= JANET_FIBER_RESUME_SIGNAL;

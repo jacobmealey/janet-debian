@@ -605,4 +605,30 @@
 (assert (zero? exit-code) "subprocess ran")
 (assert (= data "hi\nthere\n") "output is correct")
 
+# Error handling
+(assert-error "bad thread" (ev/thread in))
+(assert-error "bad thread 2" (ev/thread (fn [x y] x) 1))
+
+# Exec-slurp correct error (os/spawn and the :x flag)
+(defn exec-slurp
+  [& args]
+  # Close the process pipes. If the process pipes are not closed, janet can run out of file descriptors.
+  (with [proc (os/spawn args :xp {:out :pipe})]
+    (let [[out] (ev/gather
+                  (ev/read (proc :out) :all)
+                  (os/proc-wait proc))]
+      (if out (string/trimr out) ""))))
+(def [ok msg] (protect (exec-slurp ;run janet "-e" "(os/exit 1)")))
+(assert (not ok) "os/spawn :x 1")
+(assert (not (string/has-prefix? "cannot cancel" msg)) "os/spawn :x 2")
+(assert (string/has-prefix? "command failed" msg) "os/spawn :x 3")
+
+# OS shell
+(defn- shell-quote
+  [x]
+  (if (index-of (os/which) [:mingw :windows])
+    (string `"` x `"`)
+    (string "'" x "'")))
+(assert (= 0 (os/shell (string/join [;run janet "-e" (shell-quote "(os/exit 0)")] " "))) "os/shell simple")
+
 (end-suite)
