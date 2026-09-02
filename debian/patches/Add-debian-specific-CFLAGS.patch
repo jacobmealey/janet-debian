@@ -18,7 +18,7 @@ index 4c8d5c2..fc6543e 100644
 -COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC
 +COMMON_CFLAGS:=-std=c99 -Wall -Wextra -Isrc/include -Isrc/conf -fvisibility=hidden -fPIC \
 +	-fstack-protector-strong -fstack-clash-protection -Wformat -Werror=format-security \
-+    -Wl,-z,relro -Wl,-z,now
++   -Wl,-z,relro -Wl,-z,now -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now
 +
 +ifneq (,$(filter $(DEB_TARGET_ARCH), i386 amd64))
 +  COMMON_CFLAGS += -fcf-protection
