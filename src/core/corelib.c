@@ -494,8 +494,9 @@ JANET_CORE_FN(janet_core_table,
 }
 
 JANET_CORE_FN(janet_core_getproto,
-              "(getproto x)",
-              "Get the prototype of a table or struct. Will return nil if `x` has no prototype.") {
+              "(getproto dict)",
+              "Get the prototype of a dictionary `dict`. Returns `nil` if "
+              "`dict` has no prototype.") {
     janet_fixarity(argc, 1);
     if (janet_checktype(argv[0], JANET_TABLE)) {
         JanetTable *t = janet_unwrap_table(argv[0]);
@@ -1232,7 +1233,7 @@ JanetTable *janet_core_env(JanetTable *replacements) {
                     "in", 3, 2, 3, 4, in_asm, sizeof(in_asm),
                     JDOC("(in x key &opt dflt)\n\n"
                          "Get value in `x` at `key`. For bytes and indexed "
-                         "types, `key` must be a non-negative interger in "
+                         "types, `key` must be a non-negative integer in "
                          "bounds or an error is raised. For dictionaries "
                          "`key` must be a non-nil value and if not found, "
                          "will return `dflt` if provided or `nil` otherwise.\n"

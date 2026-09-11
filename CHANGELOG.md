@@ -1,6 +1,10 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## 1.42.1 - 2026-09-10
+- More changes to documentation.
+- Correct SONAME in Makefile
+
 ## 1.42.0 - 2026-08-31
 - Add `:locale` option to `sandbox` to mask calling `os/setlocale`.
 - JANET_PATH will now be searched strictly left-to-right for modules.
