@@ -1,6 +1,6 @@
-janet (1.42.0-1) unstable; urgency=medium
+janet (1.42.1-1) unstable; urgency=medium
 
-  * Update new Janet 1.42.0
+  * Update to Janet 1.42.1
 
  -- Jacob Mealey <jacobmealey.maine@gmail.com>  Tue, 01 Sep 2026 19:22:25 -0400
 
