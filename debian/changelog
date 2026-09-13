@@ -1,6 +1,8 @@
 janet (1.42.1-1) unstable; urgency=medium
 
   * Update to Janet 1.42.1
+  * Replaced libjanet1.41 with libjanet1.42
+  * Drop patches from 1.41.1 that have been applied upstream
 
  -- Jacob Mealey <jacobmealey.maine@gmail.com>  Tue, 01 Sep 2026 19:22:25 -0400
 
