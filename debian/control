@@ -13,7 +13,7 @@ Section: interpreters
 Architecture: any
 Multi-Arch: foreign
 Depends:
- libjanet1.41,
+ libjanet1.42,
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Lisp-like programming language for system scripting
