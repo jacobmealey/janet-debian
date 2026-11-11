@@ -13,7 +13,7 @@ Section: interpreters
 Architecture: any
 Multi-Arch: foreign
 Depends:
- libjanet1.42,
+ libjanet1.43,
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Lisp-like programming language for system scripting
@@ -25,14 +25,14 @@ Package: libjanet-dev
 Section: libdevel
 Architecture: any
 Depends:
- libjanet1.42 (= ${binary:Version}),
+ libjanet1.43 (= ${binary:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Development files for the Janet programming language
  These files may be used for incorporating the Janet language into a
  C or C++ codebase.
 
-Package: libjanet1.42
+Package: libjanet1.43
 Section: libs
 Architecture: any
 Depends:
