@@ -58,6 +58,10 @@ static int fixarity3(JanetFopts opts, JanetSlot *args) {
     (void) opts;
     return janet_v_count(args) == 3;
 }
+static int prevent_huge(JanetFopts opts, JanetSlot *args) {
+    (void) opts;
+    return janet_v_count(args) < 1000;
+}
 
 /* Generic handling for $A = op $B */
 static JanetSlot genericSS(JanetFopts opts, int op, JanetSlot s) {
@@ -342,12 +346,21 @@ static JanetSlot compreduce(
             janet_v_push(labels, label);
         }
     }
+    int bad_jump = 0;
     int32_t end = janet_v_count(c->buffer);
     for (i = 0; i < janet_v_count(labels); i++) {
         int32_t label = labels[i];
-        c->buffer[label] |= ((uint32_t)(end - label) << 16);
+        if (end - label > INT16_MAX) { /* Ideally we would just back out of the optimization */
+            bad_jump = 1;
+        } else {
+            c->buffer[label] |= ((uint32_t)(end - label) << 16);
+        }
     }
     janet_v_free(labels);
+    if (bad_jump) {
+        janetc_error(c, janet_cstring("16-bit jump overflow"));
+        return janetc_cslot(janet_wrap_nil());
+    }
     return t;
 }
 
@@ -391,12 +404,12 @@ static const JanetFunOptimizer optimizers[] = {
     {NULL, do_rshift},
     {NULL, do_rshiftu},
     {fixarity1, do_bnot},
-    {NULL, do_gt},
-    {NULL, do_lt},
-    {NULL, do_gte},
-    {NULL, do_lte},
-    {NULL, do_eq},
-    {NULL, do_neq},
+    {prevent_huge, do_gt},
+    {prevent_huge, do_lt},
+    {prevent_huge, do_gte},
+    {prevent_huge, do_lte},
+    {prevent_huge, do_eq},
+    {prevent_huge, do_neq},
     {fixarity2, do_propagate},
     {arity2or3, do_get},
     {arity1or2, do_next},

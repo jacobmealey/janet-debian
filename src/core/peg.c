@@ -161,6 +161,7 @@ static LineCol get_linecol_from_position(PegState *s, int32_t position) {
 
 /* Convert a uint64_t to a int64_t by wrapping to a maximum number of bytes */
 static int64_t peg_convert_u64_s64(uint64_t from, int width) {
+    if (width == 0) return 0; /* Avoid undefined shift */
     int shift = 8 * (8 - width);
     return ((int64_t)(from << shift)) >> shift;
 }
@@ -425,7 +426,7 @@ tail:
 
         case RULE_ARGUMENT: {
             int32_t index = ((int32_t *)rule)[1];
-            Janet capture = (index >= s->extrac) ? janet_wrap_nil() : s->extrav[index];
+            Janet capture = (index >= s->extrac || index < 0) ? janet_wrap_nil() : s->extrav[index];
             pushcap(s, capture, rule[2]);
             return text;
         }
@@ -1516,7 +1517,13 @@ static uint32_t peg_compile1(Builder *b, Janet peg) {
             int32_t n = peg_getinteger(b, peg);
             Reserve r = reserve(b, 2);
             if (n < 0) {
-                emit_1(r, RULE_NOTNCHAR, -n);
+                if (n == INT32_MIN) {
+                    /* Since buffers can't hold this many characters, will
+                     * always match. Avoid undefined behavior negating INT32_MIN. */
+                    emit_1(r, RULE_NCHAR, 0);
+                } else {
+                    emit_1(r, RULE_NOTNCHAR, -n);
+                }
             } else {
                 emit_1(r, RULE_NCHAR, n);
             }
@@ -1638,7 +1645,13 @@ static void *peg_unmarshal(JanetMarshalContext *ctx) {
 
     /* Calculate offsets. Should match those in make_peg */
     size_t bytecode_start = size_padded(sizeof(JanetPeg), sizeof(uint32_t));
+    /* Reject sizes that would overflow total_size (including the abstract header) */
+    size_t max_size = SIZE_MAX - sizeof(JanetAbstractHead) - bytecode_start - sizeof(Janet);
+    if (bytecode_len > INT32_MAX || bytecode_len > max_size / sizeof(uint32_t))
+        janet_panic("invalid peg bytecode length");
     size_t bytecode_size = bytecode_len * sizeof(uint32_t);
+    if (num_constants > (max_size - bytecode_size) / sizeof(Janet))
+        janet_panic("invalid peg constant count");
     size_t constants_start = size_padded(bytecode_start + bytecode_size, sizeof(Janet));
     size_t total_size = constants_start + sizeof(Janet) * (size_t) num_constants;
 
@@ -1749,7 +1762,9 @@ static void *peg_unmarshal(JanetMarshalContext *ctx) {
                 i += 4;
                 break;
             case RULE_ARGUMENT:
-                /* [searchtag, tag] */
+                /* [argument-index, tag] */
+                OVERFLOW_CHECK(3);
+                if (((int32_t) rule[1]) < 0) goto bad;
                 i += 3;
                 break;
             case RULE_GETTAG:
@@ -1935,6 +1950,8 @@ typedef struct {
     JanetByteView bytes;
     Janet subst;
     int32_t start;
+    JanetBuffer *input_buffer;
+    int32_t old_flags;
 } PegCall;
 
 /* Initialize state for peg cfunctions */
@@ -1948,11 +1965,18 @@ static PegCall peg_cfun_init(int32_t argc, Janet *argv, int get_replace) {
     } else {
         ret.peg = compile_peg(argv[0]);
     }
+    int input_loc = 1;
     if (get_replace) {
         ret.subst = argv[1];
-        ret.bytes = janet_getbytes(argv, 2);
+        input_loc = 2;
+    }
+    ret.bytes = janet_getbytes(argv, input_loc);
+    if (janet_checktype(argv[input_loc], JANET_BUFFER)) {
+        ret.input_buffer = janet_unwrap_buffer(argv[input_loc]);
+        ret.old_flags = ret.input_buffer->gc.flags;
+        ret.input_buffer->gc.flags |= JANET_BUFFER_FLAG_NO_REALLOC;
     } else {
-        ret.bytes = janet_getbytes(argv, 1);
+        ret.input_buffer = NULL;
     }
     if (argc > min) {
         ret.start = janet_gethalfrange(argv, min, ret.bytes.len, "offset");
@@ -1988,12 +2012,29 @@ static void peg_call_reset(PegCall *c) {
     c->s.tags->count = 0;
 }
 
+#define PEG_TRY_SETUP \
+    JanetTryState tstate; \
+    if (c.input_buffer && janet_try(&tstate)) { \
+        c.input_buffer->gc.flags = c.old_flags; \
+        Janet result = *janet_vm.return_reg; \
+        janet_restore(&tstate); \
+        janet_panicv(result); /* re-raise */ \
+    }
+
+#define PEG_TRY_TEARDOWN \
+    if (c.input_buffer) { \
+        janet_restore(&tstate); \
+        c.input_buffer->gc.flags = c.old_flags; \
+    }
+
 JANET_CORE_FN(cfun_peg_match,
               "(peg/match peg text &opt start & args)",
               "Match a Parsing Expression Grammar to a byte string and return an array of captured values. "
               "Returns nil if text does not match the language defined by peg. The syntax of PEGs is documented on the Janet website.") {
     PegCall c = peg_cfun_init(argc, argv, 0);
+    PEG_TRY_SETUP
     const uint8_t *result = peg_rule(&c.s, c.s.bytecode, c.bytes.bytes + c.start);
+    PEG_TRY_TEARDOWN
     return result ? janet_wrap_array(c.s.captures) : janet_wrap_nil();
 }
 
@@ -2001,29 +2042,37 @@ JANET_CORE_FN(cfun_peg_find,
               "(peg/find peg text &opt start & args)",
               "Find first index where the peg matches in text. Returns an integer, or nil if not found.") {
     PegCall c = peg_cfun_init(argc, argv, 0);
+    PEG_TRY_SETUP
+    Janet result = janet_wrap_nil();
     for (int32_t i = c.start; i < c.bytes.len; i++) {
         peg_call_reset(&c);
-        if (peg_rule(&c.s, c.s.bytecode, c.bytes.bytes + i))
-            return janet_wrap_integer(i);
+        if (peg_rule(&c.s, c.s.bytecode, c.bytes.bytes + i)) {
+            result = janet_wrap_integer(i);
+            break;
+        }
     }
-    return janet_wrap_nil();
+    PEG_TRY_TEARDOWN
+    return result;
 }
 
 JANET_CORE_FN(cfun_peg_find_all,
               "(peg/find-all peg text &opt start & args)",
               "Find all indexes where the peg matches in text. Returns an array of integers.") {
     PegCall c = peg_cfun_init(argc, argv, 0);
+    PEG_TRY_SETUP
     JanetArray *ret = janet_array(0);
     for (int32_t i = c.start; i < c.bytes.len; i++) {
         peg_call_reset(&c);
         if (peg_rule(&c.s, c.s.bytecode, c.bytes.bytes + i))
             janet_array_push(ret, janet_wrap_integer(i));
     }
+    PEG_TRY_TEARDOWN
     return janet_wrap_array(ret);
 }
 
 static Janet cfun_peg_replace_generic(int32_t argc, Janet *argv, int only_one) {
     PegCall c = peg_cfun_init(argc, argv, 1);
+    PEG_TRY_SETUP
     JanetBuffer *ret = janet_buffer(0);
     int32_t trail = 0;
     for (int32_t i = c.start; i < c.bytes.len;) {
@@ -2048,6 +2097,7 @@ static Janet cfun_peg_replace_generic(int32_t argc, Janet *argv, int only_one) {
     if (trail < c.bytes.len) {
         janet_buffer_push_bytes(ret, c.bytes.bytes + trail, (c.bytes.len - trail));
     }
+    PEG_TRY_TEARDOWN
     return janet_wrap_buffer(ret);
 }
 

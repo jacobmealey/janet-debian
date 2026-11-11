@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-14, macos-15-intel ]
+        os: [ ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel ]
     steps:
       - name: Checkout the repository
         uses: actions/checkout@master
@@ -174,7 +174,7 @@ jobs:
 
   test-cosmo:
     name: Test build for Cosmo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout the repository
         uses: actions/checkout@master

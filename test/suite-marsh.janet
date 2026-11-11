@@ -137,6 +137,49 @@
 \xA8\xDE\xDE\xDE\xDE\xDE\xDE\0\0\0\xDE\xDE_unmarshal_testcase3.ja
 neldb\0\0\0\xD8\x05printG\x01\0\xDE\xDE\xDE'\x03\0marshal_tes/\x02
 \0\0\0\0\0*\xFE\x01\04\x02\0\0'\x03\0\r\0\r\0\r\0\r" load-image-dict))
+# Reject peg bytecode with a negative (argument n) index - the index is read as
+# a signed int32 at match time and only bounds-checked on the high side, so a
+# negative value would read before the argument array.
+(do
+  (def b (buffer (marshal (peg/compile ~(argument 0)))))
+  (var idx nil)
+  (for i 0 (- (length b) 2)
+    (when (and (= (b i) 0x0f) (= (b (+ i 1)) 0x00) (= (b (+ i 2)) 0x00))
+      (set idx i)))
+  (assert idx "peg argument opcode not found")
+  (def tampered
+    (buffer/push (buffer (buffer/slice b 0 (+ idx 1)))
+                 "\xCD\xFA\x0A\x1F\x00"
+                 (buffer/slice b (+ idx 2))))
+  (assert-error "unmarshal peg negative argument index"
+                (peg/match (unmarshal tampered) "x" 0 :arg)))
+
+# Reject a peg bytecode length that overflows the allocation size
+(do
+  (def b (buffer (marshal (peg/compile 1))))
+  # byte 11 is the bytecode length; replace it with an encoded UINT64_MAX
+  (assert (= (b 11) 2) "unexpected peg marshal layout")
+  (def tampered
+    (buffer/push (buffer (buffer/slice b 0 11))
+                 "\xF8\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+                 (buffer/slice b 12)))
+  (assert-error "unmarshal peg bytecode length overflow"
+                (unmarshal tampered)))
+
+# Reject a function whose captured-env count disagrees with its funcdef. The
+# LB_FUNCTION record carries the number of env slots allocated for the closure,
+# but the env count the GC and upvalue opcodes use comes from the funcdef. If the
+# record claims fewer envs than the funcdef references, the envs[] array is
+# under-allocated and marking/upvalue access reads past it.
+(do
+  (def clo ((fn [x] (fn [] x)) 42))
+  (def b (buffer (marshal clo)))
+  # byte 0 is LB_FUNCTION (0xD7), byte 1 is the env count (1 here)
+  (assert (and (= (b 0) 0xD7) (= (b 1) 1)) "unexpected function marshal layout")
+  (set (b 1) 0)
+  (assert-error "unmarshal function env count mismatch"
+                (do (def c (unmarshal b)) (gccollect) (c))))
+
 # XXX: still needed? see 72beeeea
 (gccollect)
 
@@ -223,5 +266,40 @@ neldb\0\0\0\xD8\x05printG\x01\0\xDE\xDE\xDE'\x03\0marshal_tes/\x02
 (assert (= 1 (length t)) "marsh weak tables with prototypes 3")
 (assert (deep= (freeze t) (freeze tclone)) "marsh weak tables with prototypes 4")
 (assert (deep= (getproto t) (getproto tclone)) "marsh weak tables with prototypes 5")
+
+# Reject an unmarshalled fiber that has no stack frames but a resumable status.
+# A finished fiber marshals with frame == 0; forcing its status to :pending
+# leaves the VM running with frame == 0, reading the stack frame header before
+# fiber->data.
+(do
+  (def dead (fiber/new (fn [] 1)))
+  (resume dead)
+  (def b (buffer (marshal dead)))
+  # byte 0 is LB_FIBER, byte 1 is the fiber flags (status :dead here), byte 2
+  # is the frame (0 for a finished fiber)
+  (assert (and (= (b 0) 0xcc) (= (b 1) 8) (= (b 2) 0)) "unexpected fiber marshal layout")
+  # splice in flags encoding status :pending (3 << 16) with the same low bits
+  (def tampered
+    (buffer/push (buffer (buffer/slice b 0 1))
+                 "\xCD\x00\x03\x00\x08"
+                 (buffer/slice b 2)))
+  (assert-error "unmarshal frameless resumable fiber"
+                (resume (unmarshal tampered))))
+
+# A malformed channel image must be rejected before the channel is allocated.
+# Previously the abstract was allocated first, so a panic while reading the
+# header left an uninitialized channel in the heap and the next collection ran
+# its finalizer on garbage queue pointers and a garbage mutex.
+(compwhen (dyn 'ev/chan)
+  (def b (buffer (marshal (ev/chan 2))))
+  # the image ends with is_threaded, closed, limit and count, one byte each
+  (def n (length b))
+  (assert (and (= (b (- n 2)) 2) (= (b (- n 1)) 0)) "unexpected channel marshal layout")
+  # claim more queued items than the limit allows
+  (put b (- n 1) 3)
+  (assert-error "unmarshal channel count over limit" (unmarshal b))
+  # cut the image off right after the is_threaded byte
+  (assert-error "unmarshal truncated channel" (unmarshal (buffer/slice b 0 (- n 3))))
+  (gccollect))
 
 (end-suite)
