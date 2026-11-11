@@ -679,6 +679,16 @@
       "abcdef"
       @[])
 
+(test "undefined behavior: (int 0)"
+      ~(int 0)
+      "123"
+      @[0])
+
+(test "undefined behavior: int min"
+      math/int32-min
+      "abc"
+      @[])
+
 (test "sub: second pattern cannot match more than the first pattern"
       ~(sub "abcd" "abcde")
       "abcdef"
@@ -952,5 +962,38 @@
       [5] tag=0: "nd"
 
     ```))
+
+(assert-error "negative argument" (peg/compile ~(argument -1)))
+
+# A matchtime or replacement callback that grows the buffer being matched
+# reallocates its storage. The matcher kept pointing at the old allocation,
+# so the rest of the match read freed memory.
+(def peg-grow-buf @"aaaaaaaa")
+(assert-error
+  "peg/match callback resizing input buffer"
+  (peg/match ~(* (cmt (<- "a")
+                      ,(fn [_]
+                         (buffer/push peg-grow-buf (string/repeat "x" 100000))
+                         true))
+                 (some "a"))
+             peg-grow-buf))
+
+(def peg-grow-buf2 @"aXbXcXd")
+(assert-error
+  "peg/replace callback resizing input buffer"
+  (peg/replace "X"
+                   (fn [&]
+                     (buffer/push peg-grow-buf2 (string/repeat "y" 100000))
+                     "Z")
+                   peg-grow-buf2))
+
+(def peg-grow-buf3 @"aXbXcXd")
+(assert-error
+  "peg/replace-all callback resizing input buffer"
+  (peg/replace-all "X"
+                   (fn [&]
+                     (buffer/push peg-grow-buf3 (string/repeat "y" 100000))
+                     "Z")
+                   peg-grow-buf3))
 
 (end-suite)

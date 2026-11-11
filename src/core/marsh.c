@@ -325,7 +325,7 @@ static void marshal_one_def(MarshalState *st, JanetFuncDef *def, int flags) {
 
     /* Marshal closure bitset, if needed */
     if (def->flags & JANET_FUNCDEF_FLAG_HASCLOBITSET) {
-        janet_marshal_u32s(st, def->closure_bitset, ((def->slotcount + 31) >> 5));
+        janet_marshal_u32s(st, def->closure_bitset, ((def->slotcount - 1) >> 5) + 1);
     }
 }
 
@@ -1050,7 +1050,7 @@ static const uint8_t *unmarshal_one_def(
 
         /* Unmarshal closure bitset if needed */
         if (def->flags & JANET_FUNCDEF_FLAG_HASCLOBITSET) {
-            int32_t n = (def->slotcount + 31) >> 5;
+            int32_t n = ((def->slotcount - 1) >> 5) + 1;
             def->closure_bitset = array_allocate(sizeof(uint32_t), n);
             if (NULL == def->closure_bitset) {
                 JANET_OUT_OF_MEMORY;
@@ -1059,8 +1059,10 @@ static const uint8_t *unmarshal_one_def(
         }
 
         /* Validate */
-        if (janet_verify(def))
-            janet_panic("funcdef has invalid bytecode");
+        int status;
+        if ((status = janet_verify(def))) {
+            janet_panicf("funcdef has invalid bytecode: %d", status);
+        }
 
         /* Set def */
         *out = def;
@@ -1219,6 +1221,15 @@ static const uint8_t *unmarshal_one_fiber(
     int status = janet_fiber_status(fiber);
     if (status < 0 || status > JANET_STATUS_ALIVE) {
         janet_panic("invalid fiber status");
+    }
+
+    /* A fiber with no stack frames must not be resumable, or the VM reads the frame header before fiber->data */
+    if (frame == 0 &&
+            status != JANET_STATUS_DEAD &&
+            status != JANET_STATUS_ERROR &&
+            status != JANET_STATUS_ALIVE &&
+            !(status >= JANET_STATUS_USER0 && status <= JANET_STATUS_USER4)) {
+        janet_panic("fiber with no stack frames cannot be resumable");
     }
 
     /* Return data */
@@ -1439,6 +1450,10 @@ static const uint8_t *unmarshal_one(
             *out = janet_wrap_function(func);
             janet_v_push(st->lookup, *out);
             data = unmarshal_one_def(st, data, &def, flags + 1);
+            if (def->environments_length != len) {
+                janet_panicf("invalid function - env count %d does not match funcdef (%d)",
+                             len, def->environments_length);
+            }
             func->def = def;
             for (int32_t i = 0; i < len; i++) {
                 data = unmarshal_one_env(st, data, &(func->envs[i]), flags + 1);
@@ -1484,7 +1499,7 @@ static const uint8_t *unmarshal_one(
                 /* Tuple */
                 Janet *tup = janet_tuple_begin(len);
                 int32_t flag = readint(st, &data);
-                janet_tuple_flag(tup) |= (int32_t) (((uint32_t) flag) << 16); /* Avoid left shift of negative value */
+                janet_tuple_flag(tup) |= (int32_t)(((uint32_t) flag) << 16);  /* Avoid left shift of negative value */
                 for (int32_t i = 0; i < len; i++) {
                     data = unmarshal_one(st, data, tup + i, flags + 1);
                 }
@@ -1670,22 +1685,26 @@ Janet janet_unmarshal(
 
 JANET_CORE_FN(cfun_env_lookup,
               "(env-lookup env)",
-              "Creates a forward lookup table for unmarshalling from an environment. "
-              "To create a reverse lookup table, use the invert function to swap keys "
-              "and values in the returned table.") {
+              "Creates a forward lookup table for unmarshalling from an "
+              "environment `env`. To create a reverse lookup table, use "
+              "`invert` to swap keys and values in the returned table.") {
     janet_fixarity(argc, 1);
     JanetTable *env = janet_gettable(argv, 0);
     return janet_wrap_table(janet_env_lookup(env));
 }
 
 JANET_CORE_FN(cfun_marshal,
-              "(marshal x &opt reverse-lookup buffer no-cycles)",
-              "Marshal a value into a buffer and return the buffer. The buffer "
-              "can then later be unmarshalled to reconstruct the initial value. "
-              "Optionally, one can pass in a reverse lookup table to not marshal "
-              "aliased values that are found in the table. Then a forward "
-              "lookup table can be used to recover the original value when "
-              "unmarshalling.") {
+              "(marshal x &opt rev-lookup buf no-cycles)",
+              "Marshal a value, `x`, into a buffer and return the buffer. "
+              "The buffer can then later be unmarshalled to reconstruct the "
+              "initial value. Optionally, pass in a table, `rev-lookup`, to "
+              "specify aliased values to not marshal. Then a forward lookup "
+              "table can be used to recover the original value when "
+              "unmarshalling. If optional argument `buf` is provided, "
+              "marshal into and return that instead. The optional "
+              "`no-cycles` parameter will make `unmarshal` faster if it is "
+              "known that there are no cycles; will error if there are "
+              "cycles.") {
     janet_arity(argc, 1, 4);
     JanetBuffer *buffer;
     JanetTable *rreg = NULL;
@@ -1706,10 +1725,10 @@ JANET_CORE_FN(cfun_marshal,
 }
 
 JANET_CORE_FN(cfun_unmarshal,
-              "(unmarshal buffer &opt lookup)",
-              "Unmarshal a value from a buffer. An optional lookup table "
-              "can be provided to allow for aliases to be resolved. Returns the value "
-              "unmarshalled from the buffer.") {
+              "(unmarshal buf &opt lookup)",
+              "Unmarshal a value from a buffer, `buf`. Optionally provide "
+              "a table, `lookup`, to allow for aliases to be resolved. "
+              "Returns the value unmarshalled from `buf`.") {
     janet_sandbox_assert(JANET_SANDBOX_UNMARSHAL);
     janet_arity(argc, 1, 2);
     JanetByteView view = janet_getbytes(argv, 0);

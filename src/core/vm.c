@@ -669,7 +669,7 @@ static JanetSignal run_vm(JanetFiber *fiber, Janet in) {
     vm_pcnext();
 
     VM_OP(JOP_ERROR)
-    vm_return(JANET_SIGNAL_ERROR, stack[A]);
+    vm_return(JANET_SIGNAL_ERROR, stack[D]);
 
     VM_OP(JOP_TYPECHECK)
     vm_assert_types(stack[A], E);
@@ -990,7 +990,7 @@ static JanetSignal run_vm(JanetFiber *fiber, Janet in) {
             int32_t i;
             for (i = 0; i < elen; ++i) {
                 int32_t inherit = fd->environments[i];
-                if (inherit == -1 || inherit >= func->def->environments_length) {
+                if (inherit < 0 || inherit >= func->def->environments_length) {
                     JanetStackFrame *frame = janet_stack_frame(stack);
                     if (!frame->env) {
                         /* Lazy capture of current stack frame */

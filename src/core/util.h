@@ -69,6 +69,14 @@ uint32_t janet_hash_mix(uint32_t input, uint32_t more);
 
 #define janet_maphash(cap, hash) ((uint32_t)(hash) & (cap - 1))
 
+/* janet_bitwise_same is true when x and y are the same type and bits,
+ * guarded for the nanboxed implementation */
+#if defined(JANET_NANBOX_64) || defined(JANET_NANBOX_32)
+#define janet_bitwise_same(x, y) (janet_u64(x) == janet_u64(y))
+#else
+#define janet_bitwise_same(x, y) ((x).type == (y).type && janet_u64(x) == janet_u64(y))
+#endif
+
 int janet_valid_utf8(const uint8_t *str, int32_t len);
 
 int janet_is_symbol_char(uint8_t c);
@@ -86,6 +94,8 @@ int32_t janet_tablen(int32_t n);
 void safe_memcpy(void *dest, const void *src, size_t len);
 
 void janet_buffer_push_types(JanetBuffer *buffer, int types);
+
+const JanetKV *janet_dict_find_deep(const JanetKV *buckets, int32_t cap, Janet key);
 
 const JanetKV *janet_dict_find(const JanetKV *buckets, int32_t cap, Janet key);
 
@@ -165,6 +175,12 @@ enum JanetTimeSource {
     JANET_TIME_CPUTIME
 };
 int janet_gettime(struct timespec *spec, enum JanetTimeSource source);
+#endif
+
+#ifdef JANET_BOOTSTRAP
+extern int64_t total_instruction_count;
+extern int64_t total_optimize_fixpoint_loops;
+extern int64_t total_funcdefs_optimized;
 #endif
 
 /* strdup */
