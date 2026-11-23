@@ -10,16 +10,16 @@ Vcs-Browser: https://salsa.debian.org/jacobmealey/janet
 
 Package: janet
 Section: interpreters
-Architecture: any
+Architecture: same
 Multi-Arch: foreign
 Depends:
  libjanet1.43,
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Lisp-like programming language for system scripting
- expressive automation, and extending programs written in C
- or C++ with user scripting capabilities.
-
+ Janet is lisp-like programming language for system scripting
+ expressive automation, and extending programs written in C or C++
+ with user scripting capabilities.
 
 Package: libjanet-dev
 Section: libdevel
@@ -29,8 +29,8 @@ Depends:
  ${misc:Depends},
  ${shlibs:Depends},
 Description: Development files for the Janet programming language
- These files may be used for incorporating the Janet language into a
- C or C++ codebase.
+ These files may be used for incorporating the Janet language into a C
+ or C++ codebase.
 
 Package: libjanet1.43
 Section: libs
@@ -40,5 +40,5 @@ Depends:
  ${shlibs:Depends},
 Description: Shared libraries for the Janet programming language
  Janet is lisp-like programming language for system scripting
- expressive automation, and extending programs written in C
- or C++ with user scripting capabilities.
+ expressive automation, and extending programs written in C or C++
+ with user scripting capabilities.
